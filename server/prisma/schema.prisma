@@ -1,0 +1,129 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  PLAYER
+  ORGANIZER
+}
+
+enum QuestionType {
+  SINGLE
+  MULTIPLE
+}
+
+enum RoomStatus {
+  WAITING
+  PLAYING
+  FINISHED
+}
+
+model User {
+  id            String            @id @default(cuid())
+  name          String
+  email         String            @unique
+  passwordHash  String
+  role          UserRole
+  createdAt     DateTime          @default(now())
+  quizzes       Quiz[]
+  hostedRooms   GameRoom[]        @relation("HostedRooms")
+  participations RoomParticipant[]
+}
+
+model Quiz {
+  id                     String     @id @default(cuid())
+  title                  String
+  description            String
+  category               String
+  defaultTimePerQuestion Int
+  rules                  Json?
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+  authorId               String
+  author                 User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  questions              Question[]
+  rooms                  GameRoom[]
+}
+
+model Question {
+  id        String         @id @default(cuid())
+  quizId    String
+  order     Int
+  text      String
+  imagePath String?
+  type      QuestionType
+  timeLimit Int
+  points    Int
+  quiz      Quiz           @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  answers   AnswerOption[]
+  roomAnswers RoomAnswer[]
+
+  @@unique([quizId, order])
+}
+
+model AnswerOption {
+  id         String       @id @default(cuid())
+  questionId String
+  text       String
+  isCorrect  Boolean      @default(false)
+  order      Int
+  question   Question     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, order])
+}
+
+model GameRoom {
+  id                       String            @id @default(cuid())
+  code                     String            @unique
+  quizId                   String
+  hostId                   String
+  status                   RoomStatus        @default(WAITING)
+  currentQuestionIndex     Int               @default(-1)
+  currentQuestionStartedAt DateTime?
+  currentQuestionEndsAt    DateTime?
+  startedAt                DateTime?
+  finishedAt               DateTime?
+  createdAt                DateTime          @default(now())
+  quiz                     Quiz              @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  host                     User              @relation("HostedRooms", fields: [hostId], references: [id], onDelete: Cascade)
+  participants             RoomParticipant[]
+  answers                  RoomAnswer[]
+}
+
+model RoomParticipant {
+  id            String       @id @default(cuid())
+  roomId         String
+  userId         String?
+  displayName    String
+  joinedAt       DateTime     @default(now())
+  connected      Boolean      @default(true)
+  finalScore     Int          @default(0)
+  correctAnswers Int          @default(0)
+  room           GameRoom     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  answers        RoomAnswer[]
+
+  @@unique([roomId, displayName])
+}
+
+model RoomAnswer {
+  id                String          @id @default(cuid())
+  roomId            String
+  questionId        String
+  participantId     String
+  selectedOptionIds Json
+  isCorrect         Boolean
+  timeSpentMs       Int
+  pointsEarned      Int
+  submittedAt       DateTime        @default(now())
+  room              GameRoom        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  question          Question        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  participant       RoomParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, questionId, participantId])
+}
